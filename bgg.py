@@ -56,16 +56,17 @@ if __name__ == "__main__":
         )
         if available > 0 and prev_available != available:
             msg = (
-                f"({now}) 🔔🔔🔔 {available} of {num_badges} {name} badges available: "
+                f"({now}) 🔔 @everyone 🔔 {available} of {num_badges} {name} badges available: "
                 "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
             )
             send_discord_message(msg)
         elif prev_available > 0 and available == 0:
             msg = f"({now}) 😢 {name} badges are sold out, {available} of {num_badges} available."
             send_discord_message(msg)
+            last_update = time.time()
         elif time.time() - last_update > 60 * 30:
             msg = f"({now}) 🤖 Still checking for {name} badges..."
             send_discord_message(msg)
-        last_update = time.time()
+            last_update = time.time()
         prev_available = available
         time.sleep(10)
