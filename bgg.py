@@ -54,9 +54,15 @@ if __name__ == "__main__":
             f"({now}) {available} of {num_badges} {name} badges available.",
             file=sys.stdout,
         )
-        if available > 0 and prev_available != available:
+        if available > 0 and prev_available == 0:
             msg = (
                 f"({now}) 🔔 @everyone 🔔 {available} of {num_badges} {name} badges available: "
+                "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
+            )
+            send_discord_message(msg)
+        elif available > 0 and prev_available != available:
+            msg = (
+                f"({now}) 🎟️ {available} of {num_badges} {name} badges available: "
                 "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
             )
             send_discord_message(msg)
@@ -64,7 +70,7 @@ if __name__ == "__main__":
             msg = f"({now}) 😢 {name} badges are sold out, {available} of {num_badges} available."
             send_discord_message(msg)
             last_update = time.time()
-        elif time.time() - last_update > 60 * 30:
+        elif time.time() - last_update > 60 * 180:
             msg = f"({now}) 🤖 Still checking for {name} badges..."
             send_discord_message(msg)
             last_update = time.time()
