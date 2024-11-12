@@ -1,20 +1,31 @@
 """
-A small program to check tabletop.events for badge availability to BGG.CON 2023.
+A small program to check tabletop.events for badge availability to BGG.CON.
 Poll the API every 10 seconds and send a message to Discord if badges are available.
 """
 
 import datetime
+import os
 import sys
 import time
-import os
+
 import requests
 
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
-GAME_QUERY_URL = 'https://tabletop.events/api/library/0AEB11DA-2B7D-11EC-B400-855F800FD618/librarygames'
-
 DEBUG = os.environ.get("BGG_DEBUG", False)
+
+# Set to True to check for game availability instead of badges.
 GAME_MODE = os.environ.get("BGG_GAME_MODE", False)
+
+# Notification Webhook URL
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+
+# For game availability.
+LIBRARY_UUID = "0AEB11DA-2B7D-11EC-B400-855F800FD618"
+GAME_QUERY_URL = f"https://tabletop.events/api/library/{LIBRARY_UUID}/librarygames"
 GAME_WATCHLIST = os.environ.get("BGG_WATCHLIST", "").split(",")
+
+# For badge availability.
+CONVENTION_UUID = "C50E2390-C43D-11ED-AB2B-20397E91607B"
+
 
 def send_discord_message(message, dry=False):
     """
@@ -26,6 +37,7 @@ def send_discord_message(message, dry=False):
     if not dry and len(WEBHOOK_URL) > 0:
         data = {"content": message}
         requests.post(WEBHOOK_URL, json=data, timeout=5)
+
 
 def get_game(game):
     """
@@ -40,9 +52,13 @@ def get_game(game):
     games = data["result"]["items"]
     matches = []
     for g in games:
-        if g["custom_fields"]["ItemType"] == "Standalone" and g["custom_fields"]["Location"] != "HOT GAMES":
+        if (
+            g["custom_fields"]["ItemType"] == "Standalone"
+            and g["custom_fields"]["Location"] != "HOT GAMES"
+        ):
             matches.append(g)
     return matches
+
 
 def get_game_availablity(games):
     sorted = {}
@@ -55,23 +71,27 @@ def get_game_availablity(games):
         sorted.update({matched_name: entry})
     return sorted
 
+
 def format_watchlist_details(games):
     now = datetime.datetime.now()
     watchlist = """
 ( ⌐■_■) WATCHLIST
 ================="""
     for g in games:
-        if g["is_checked_out"] == 0: 
+        if g["is_checked_out"] == 0:
             watchlist += f"\n'{g['name']}: Avaliable.'"
         else:
-            checkout_time = datetime.datetime.strptime(g['last_checkout_date'], "%Y-%m-%d %H:%M:%S")
+            checkout_time = datetime.datetime.strptime(
+                g["last_checkout_date"], "%Y-%m-%d %H:%M:%S"
+            )
             delta = now - checkout_time
             total_s = delta.total_seconds()
             h = abs(total_s // 3600)
-            m = abs((total_s%3600) // 60)
+            m = abs((total_s % 3600) // 60)
             watchlist += f"\n'{g['name']}: Checked out {h} hour(s) and {m} minutes ago."
-    return watchlist 
-    
+    return watchlist
+
+
 def get_attendee_badge_availablity():
     """
     Query the tabletop.events API for badge availability.
@@ -79,7 +99,7 @@ def get_attendee_badge_availablity():
 
     # Make request to tabletop.events
     resp = requests.get(
-        "https://tabletop.events/api/convention/C50E2390-C43D-11ED-AB2B-20397E91607B/badgetypes?_include_relationships=1&_items_per_page=10&_order_by=sequence_number&_page_number=1",
+        f"https://tabletop.events/api/convention/{CONVENTION_UUID}/badgetypes?_include_relationships=1&_items_per_page=10&_order_by=sequence_number&_page_number=1",
         timeout=5,
     )
     data = resp.json()
@@ -90,6 +110,7 @@ def get_attendee_badge_availablity():
     max_available_count = data["result"]["items"][0]["max_available_count"]
 
     return item_name, available_quantity, max_available_count
+
 
 # pylint: disable=C0103
 if __name__ == "__main__":
@@ -108,10 +129,10 @@ if __name__ == "__main__":
             # Get the current state of games
             for n in GAME_WATCHLIST:
                 copies += get_game(n)
-            
+
             # Print a summary of every game copy
             if time.time() - last_update > 60 * 60:
-                send_discord_message(format_watchlist_details(copies))        
+                send_discord_message(format_watchlist_details(copies))
                 last_update = time.time()
 
             # Aggregate game by 'name'.
@@ -126,7 +147,6 @@ if __name__ == "__main__":
                     send_discord_message(f" ( ಥ╭╮ಥ)\" '{name}' is all checked out...")
             prev = cur
             time.sleep(10)
-    
 
     while True:
         name, available, num_badges = get_attendee_badge_availablity()
