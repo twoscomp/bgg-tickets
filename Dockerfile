@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the program files into the container
 COPY bgg.py .
+COPY credentials.json .
+COPY token.json .
 
 # Set the command to run the program
 CMD ["python", "-u", "bgg.py"]
