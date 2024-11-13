@@ -9,12 +9,10 @@ import sys
 import time
 
 import requests
-
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 DEBUG = os.environ.get("BGG_DEBUG", False)
 
@@ -214,22 +212,25 @@ def game_mode():
     prev = {}
     send_discord_message("🤖 Starting BGG.CON Game Availability Bot...")
     while True:
-        sheets = get_sheets_service()
-        watchlist = get_watchlist(sheets)
         cur = {}
-        if len(watchlist) == 0:
-            exit("ERR: Watchlist is empty.")
-
         copies = []
-        # Get the current state of games
-        for n in watchlist:
-            copies += get_game(n)
 
-        # Update the spreadsheet with the current state of games
-        body = format_spreadsheet_update(copies)
-        clear_spreadsheet_data(sheets)
-        update_spreadsheet_data(sheets, body)
-        update_spreadsheet_timestamp(sheets)
+        try:
+            # Read the watchlist from Google Sheets
+            sheets = get_sheets_service()
+            watchlist = get_watchlist(sheets)
+            # Get the current state of games
+            for n in watchlist:
+                copies += get_game(n)
+
+            # Update the spreadsheet with the current state of games
+            body = format_spreadsheet_update(copies)
+            clear_spreadsheet_data(sheets)
+            update_spreadsheet_data(sheets, body)
+            update_spreadsheet_timestamp(sheets)
+        except Exception as error:
+            print(f"An error occurred: {error}")
+            send_discord_message(f"🤖 An error occurred: {error}")
 
         # Aggregate game by 'name'.
         cur = get_game_availablity(copies)
@@ -238,9 +239,9 @@ def game_mode():
         for name, c in cur.items():
             p = prev.get(name, {"avail": -1, "total": -1})
             if p["avail"] == 0 and c["avail"] > 0:
-                send_discord_message(f"(ʘ言ʘ╬) @everyone '{name}' is available!!!")
+                send_discord_message(f"✅ @everyone '{name}' is available!!!")
             elif p["avail"] > 0 and c["avail"] == 0:
-                send_discord_message(f" ( ಥ╭╮ಥ)\" '{name}' is all checked out...")
+                send_discord_message(f"🚫 '{name}' is all checked out...")
         prev = cur
         time.sleep(10)
 
