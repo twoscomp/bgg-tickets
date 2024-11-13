@@ -86,16 +86,36 @@ def get_game_availablity(games):
     return sorted
 
 
+def calculate_timedelta(last_date):
+    if last_date.tzinfo is None:
+        last_date = pytz.utc.localize(last_date)
+    now = datetime.datetime.now(pytz.utc)
+    delta = now - last_date
+    hours, remainder = divmod(delta.total_seconds(), 3600)
+    minutes = remainder // 60
+    return f"{int(hours)}h {int(minutes)}m"
+
+
 def format_spreadsheet_update(copies):
     body = []
     for c in copies:
         row = [c["name"]]
         if c["is_checked_out"] == 0:
             row.append(True)
-            row.append(c["last_checkin_date"])
+            last_date = datetime.datetime.strptime(
+                c["last_checkin_date"], "%Y-%m-%d %H:%M:%S"
+            )
+            row.append(convert_to_cst(c["last_checkin_date"]))
         else:
             row.append(False)
-            row.append(c["last_checkout_date"])
+            last_date = datetime.datetime.strptime(
+                c["last_checkout_date"], "%Y-%m-%d %H:%M:%S"
+            )
+            row.append(convert_to_cst(c["last_checkout_date"]))
+
+        # Calculate timedelta and append to row
+        row.append(calculate_timedelta(last_date))
+
         body.append(row)
     return body
 
@@ -103,8 +123,8 @@ def format_spreadsheet_update(copies):
 def get_attendee_badge_availablity():
     """
     Query the tabletop.events API for badge availability.
-    """
 
+    """
     # Make request to tabletop.events
     resp = requests.get(
         f"https://tabletop.events/api/convention/{CONVENTION_UUID}/badgetypes?_include_relationships=1&_items_per_page=10&_order_by=sequence_number&_page_number=1",
@@ -156,6 +176,17 @@ def get_watchlist(sheets_service):
     return values
 
 
+def convert_to_cst(time_str):
+    """
+    Convert a time string to CST.
+    """
+    central = pytz.timezone("US/Central")
+    dt = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+    dt = pytz.utc.localize(dt)
+    dt = dt.astimezone(central)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def update_spreadsheet_data(sheets_service, body):
     """
     Update the Google Sheets with the current state of games.
@@ -165,7 +196,7 @@ def update_spreadsheet_data(sheets_service, body):
         sheet.values()
         .update(
             spreadsheetId=SPREADSHEET_ID,
-            range="Data!A2:C1000",
+            range="Data!A2:D1000",
             valueInputOption="USER_ENTERED",
             body={"values": body},
         )
@@ -204,7 +235,7 @@ def clear_spreadsheet_data(sheets_service):
         sheet.values()
         .clear(
             spreadsheetId=SPREADSHEET_ID,
-            range="Data!A2:C1000",
+            range="Data!A2:D1000",
         )
         .execute()
     )
@@ -213,7 +244,7 @@ def clear_spreadsheet_data(sheets_service):
 
 def game_mode():
     prev = {}
-    send_discord_message("🤖 Starting BGG.CON Game Availability Bot...")
+    # send_discord_message("🤖 Starting BGG.CON Game Availability Bot...")
     while True:
         cur = {}
         copies = []
