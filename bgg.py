@@ -8,6 +8,7 @@ import os
 import sys
 import time
 
+import pytz
 import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -177,8 +178,10 @@ def update_spreadsheet_timestamp(sheets_service):
     """
     Update the Google Sheets with the current timestamp.
     """
+
+    central = pytz.timezone("US/Central")
+    now = datetime.datetime.now(central).strftime("%Y-%m-%d %H:%M:%S")
     sheet = sheets_service.spreadsheets()
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     result = (
         sheet.values()
         .update(
