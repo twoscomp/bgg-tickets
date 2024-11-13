@@ -175,6 +175,25 @@ def update_spreadsheet_data(sheets_service, body):
     return result
 
 
+def update_spreadsheet_timestamp(sheets_service):
+    """
+    Update the Google Sheets with the current timestamp.
+    """
+    sheet = sheets_service.spreadsheets()
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    result = (
+        sheet.values()
+        .update(
+            spreadsheetId=SPREADSHEET_ID,
+            range="Data!F1",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[now]]},
+        )
+        .execute()
+    )
+    return result
+
+
 def clear_spreadsheet_data(sheets_service):
     """
     Clear the Google Sheets with the current state of games.
@@ -210,6 +229,7 @@ def game_mode():
         body = format_spreadsheet_update(copies)
         clear_spreadsheet_data(sheets)
         update_spreadsheet_data(sheets, body)
+        update_spreadsheet_timestamp(sheets)
 
         # Aggregate game by 'name'.
         cur = get_game_availablity(copies)
