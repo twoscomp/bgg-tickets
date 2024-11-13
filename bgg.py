@@ -262,21 +262,22 @@ def game_mode():
             clear_spreadsheet_data(sheets)
             update_spreadsheet_data(sheets, body)
             update_spreadsheet_timestamp(sheets)
+
+            # Aggregate game by 'name'.
+            cur = get_game_availablity(copies)
+
+            # Compare to previous state of games. Send a discord message if changed.
+            for name, c in cur.items():
+                p = prev.get(name, {"avail": -1, "total": -1})
+                if p["avail"] == 0 and c["avail"] > 0:
+                    send_discord_message(f"✅ @everyone '{name}' is available!!!")
+                elif p["avail"] > 0 and c["avail"] == 0:
+                    send_discord_message(f"🚫 '{name}' is all checked out...")
+            prev = cur
         except Exception as error:
             print(f"An error occurred: {error}")
             send_discord_message(f"🤖 An error occurred: {error}")
 
-        # Aggregate game by 'name'.
-        cur = get_game_availablity(copies)
-
-        # Compare to previous state of games. Send a discord message if changed.
-        for name, c in cur.items():
-            p = prev.get(name, {"avail": -1, "total": -1})
-            if p["avail"] == 0 and c["avail"] > 0:
-                send_discord_message(f"✅ @everyone '{name}' is available!!!")
-            elif p["avail"] > 0 and c["avail"] == 0:
-                send_discord_message(f"🚫 '{name}' is all checked out...")
-        prev = cur
         time.sleep(10)
 
 
