@@ -32,7 +32,6 @@ GAME_WATCHLIST = os.environ.get("BGG_WATCHLIST", "").split(",")
 # For badge availability.
 CONVENTION_UUID = "C50E2390-C43D-11ED-AB2B-20397E91607B"
 
-
 # Google Sheets for loading watchlist
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
@@ -246,6 +245,8 @@ def clear_spreadsheet_data(sheets_service):
 
 def game_mode():
     prev = {}
+    backoff = 10  # Initial backoff time in seconds
+
     # send_discord_message("🤖 Starting BGG.CON Game Availability Bot...")
     while True:
         cur = {}
@@ -276,11 +277,13 @@ def game_mode():
                 elif p["avail"] > 0 and c["avail"] == 0:
                     send_discord_message(f"🚫 '{name}' is all checked out...")
             prev = cur
+            backoff = 10
         except Exception as error:
             print(f"An error occurred: {error}")
             send_discord_message(f"🤖 An error occurred: {error}")
+            backoff = min(backoff * 2, 60 * 5)  # Exponential backoff up to 5 minutes
 
-        time.sleep(10)
+        time.sleep(backoff)
 
 
 def badge_mode():
