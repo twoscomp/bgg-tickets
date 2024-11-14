@@ -40,6 +40,8 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SPREADSHEET_ID = "17ZW0hl3x2A56zrWRH67SZOraqAYSTWSPNnpXWJF1CEg"
 WATCHLIST_RANGE = "Watchlist!A2:A"
 
+HTTP_TIMEOUT = 10
+
 
 def send_discord_message(message, dry=False):
     """
@@ -59,7 +61,7 @@ def get_game(game):
     """
 
     query = {"query": game, "is_in_circulation": 1}
-    resp = requests.get(GAME_QUERY_URL, params=query)
+    resp = requests.get(GAME_QUERY_URL, params=query, timeout=HTTP_TIMEOUT)
     data = resp.json()
 
     # Parse JSON for availabe games
@@ -128,7 +130,7 @@ def get_attendee_badge_availablity():
     # Make request to tabletop.events
     resp = requests.get(
         f"https://tabletop.events/api/convention/{CONVENTION_UUID}/badgetypes?_include_relationships=1&_items_per_page=10&_order_by=sequence_number&_page_number=1",
-        timeout=5,
+        timeout=HTTP_TIMEOUT,
     )
     data = resp.json()
 
