@@ -16,6 +16,11 @@ ENV/
 *.sqlite3
 *.db
 
+# Google OAuth credentials (sensitive)
+credentials.json
+token.json
+*.json:Zone.Identifier
+
 # Other
 *.pyc
 .DS_Store

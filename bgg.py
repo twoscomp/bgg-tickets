@@ -21,25 +21,38 @@ DEBUG = os.environ.get("BGG_DEBUG", False)
 GAME_MODE = os.environ.get("BGG_GAME_MODE", False)
 
 # Notification Webhook URL
-# WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
-WEBHOOK_URL = "https://discord.com/api/webhooks/1306159146751492116/rTQtg-okXmS32nX56F7p4XTXsAPMxgvvCSqkddZM78yhWgI3soO9ZJtKobVPpU2uNNm5"
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 
 # For game availability.
-LIBRARY_UUID = "0AEB11DA-2B7D-11EC-B400-855F800FD618"
+LIBRARY_UUID = os.environ.get("BGG_LIBRARY_UUID", "0AEB11DA-2B7D-11EC-B400-855F800FD618")
 GAME_QUERY_URL = f"https://tabletop.events/api/library/{LIBRARY_UUID}/librarygames"
 GAME_WATCHLIST = os.environ.get("BGG_WATCHLIST", "").split(",")
 
 # For badge availability.
-CONVENTION_UUID = "C50E2390-C43D-11ED-AB2B-20397E91607B"
+CONVENTION_UUID = os.environ.get("BGG_CONVENTION_UUID", "C50E2390-C43D-11ED-AB2B-20397E91607B")
 
 # Google Sheets for loading watchlist
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # The ID and range of a watchlist spreadsheet.
-SPREADSHEET_ID = "17ZW0hl3x2A56zrWRH67SZOraqAYSTWSPNnpXWJF1CEg"
-WATCHLIST_RANGE = "Watchlist!A2:A"
+SPREADSHEET_ID = os.environ.get("BGG_SPREADSHEET_ID", "17ZW0hl3x2A56zrWRH67SZOraqAYSTWSPNnpXWJF1CEg")
+WATCHLIST_RANGE = os.environ.get("BGG_WATCHLIST_RANGE", "Watchlist!A2:A")
+SPREADSHEET_DATA_RANGE = os.environ.get("BGG_SPREADSHEET_DATA_RANGE", "Data!A2:D1000")
+SPREADSHEET_TIMESTAMP_RANGE = os.environ.get("BGG_SPREADSHEET_TIMESTAMP_RANGE", "Data!F1")
 
-HTTP_TIMEOUT = 10
+# HTTP request timeout in seconds
+HTTP_TIMEOUT = int(os.environ.get("BGG_HTTP_TIMEOUT", "10"))
+
+# Polling intervals (in seconds)
+BADGE_POLL_INTERVAL = int(os.environ.get("BGG_BADGE_POLL_INTERVAL", "10"))
+GAME_POLL_INTERVAL = int(os.environ.get("BGG_GAME_POLL_INTERVAL", "10"))
+BADGE_STATUS_UPDATE_INTERVAL = int(os.environ.get("BGG_BADGE_STATUS_UPDATE_INTERVAL", "10800"))  # 3 hours in seconds
+GAME_MAX_BACKOFF = int(os.environ.get("BGG_GAME_MAX_BACKOFF", "300"))  # 5 minutes in seconds
+
+# Google OAuth credentials file paths (configurable via environment variables)
+# Defaults to current directory for local use, or /app for Docker
+CREDENTIALS_FILE = os.environ.get("GOOGLE_CREDENTIALS_FILE", "credentials.json")
+TOKEN_FILE = os.environ.get("GOOGLE_TOKEN_FILE", "token.json")
 
 
 def send_discord_message(message, dry=False):
@@ -147,15 +160,21 @@ def get_sheets_service():
     """
     # Set up the credentials
     creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if os.path.exists(TOKEN_FILE):
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+            if not os.path.exists(CREDENTIALS_FILE):
+                raise FileNotFoundError(
+                    f"Google credentials file not found: {CREDENTIALS_FILE}. "
+                    f"Please set GOOGLE_CREDENTIALS_FILE environment variable or "
+                    f"place credentials.json in the current directory."
+                )
+            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open("token.json", "w") as token:
+        with open(TOKEN_FILE, "w") as token:
             token.write(creds.to_json())
     # Build the service
     service = build("sheets", "v4", credentials=creds)
@@ -197,7 +216,7 @@ def update_spreadsheet_data(sheets_service, body):
         sheet.values()
         .update(
             spreadsheetId=SPREADSHEET_ID,
-            range="Data!A2:D1000",
+            range=SPREADSHEET_DATA_RANGE,
             valueInputOption="USER_ENTERED",
             body={"values": body},
         )
@@ -218,7 +237,7 @@ def update_spreadsheet_timestamp(sheets_service):
         sheet.values()
         .update(
             spreadsheetId=SPREADSHEET_ID,
-            range="Data!F1",
+            range=SPREADSHEET_TIMESTAMP_RANGE,
             valueInputOption="USER_ENTERED",
             body={"values": [[now]]},
         )
@@ -236,7 +255,7 @@ def clear_spreadsheet_data(sheets_service):
         sheet.values()
         .clear(
             spreadsheetId=SPREADSHEET_ID,
-            range="Data!A2:D1000",
+            range=SPREADSHEET_DATA_RANGE,
         )
         .execute()
     )
@@ -245,7 +264,7 @@ def clear_spreadsheet_data(sheets_service):
 
 def game_mode():
     prev = {}
-    backoff = 10  # Initial backoff time in seconds
+    backoff = GAME_POLL_INTERVAL  # Initial backoff time in seconds
 
     # send_discord_message("🤖 Starting BGG.CON Game Availability Bot...")
     while True:
@@ -277,17 +296,17 @@ def game_mode():
                 elif p["avail"] > 0 and c["avail"] == 0:
                     send_discord_message(f"🚫 '{name}' is all checked out...")
             prev = cur
-            backoff = 10
+            backoff = GAME_POLL_INTERVAL
         except Exception as error:
             print(f"An error occurred: {error}")
             send_discord_message(f"🤖 An error occurred: {error}")
-            backoff = min(backoff * 2, 60 * 5)  # Exponential backoff up to 5 minutes
+            backoff = min(backoff * 2, GAME_MAX_BACKOFF)  # Exponential backoff up to max backoff
 
         time.sleep(backoff)
 
 
 def badge_mode():
-    # Check every 10 seconds if badges are available. If so, then send a message to Discord.
+    # Check for badge availability at configured intervals and send messages to Discord.
     prev_available = 10000
     last_update = 0
     while True:
@@ -313,16 +332,22 @@ def badge_mode():
             msg = f"({now}) 😢 {name} badges are sold out, {available} of {num_badges} available."
             send_discord_message(msg)
             last_update = time.time()
-        elif time.time() - last_update > 60 * 180:
+        elif time.time() - last_update > BADGE_STATUS_UPDATE_INTERVAL:
             msg = f"({now}) 🤖 Still checking for {name} badges..."
             send_discord_message(msg)
             last_update = time.time()
         prev_available = available
-        time.sleep(10)
+        time.sleep(BADGE_POLL_INTERVAL)
 
 
 # pylint: disable=C0103
 if __name__ == "__main__":
+    if not WEBHOOK_URL:
+        print(
+            "Warning: WEBHOOK_URL environment variable is not set. "
+            "Discord notifications will not be sent.",
+            file=sys.stderr,
+        )
 
     if GAME_MODE:
         game_mode()

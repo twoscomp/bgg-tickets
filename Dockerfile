@@ -10,8 +10,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the program files into the container
 COPY bgg.py .
-COPY credentials.json .
-COPY token.json .
+
+# Note: credentials.json and token.json should be provided via volume mounts
+# or set GOOGLE_CREDENTIALS_FILE and GOOGLE_TOKEN_FILE environment variables
+# to point to mounted files
 
 # Set the command to run the program
 CMD ["python", "-u", "bgg.py"]
