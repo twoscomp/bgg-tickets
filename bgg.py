@@ -10,6 +10,7 @@ import time
 
 import pytz
 import requests
+from requests.exceptions import SSLError, ConnectionError, Timeout, RequestException
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -71,21 +72,34 @@ def get_game(game):
     """
     Query the tabletop.events Library API for games by name. Return the total number and the number available.
     """
+    try:
+        query = {"query": game, "is_in_circulation": 1}
+        resp = requests.get(GAME_QUERY_URL, params=query, timeout=HTTP_TIMEOUT)
+        resp.raise_for_status()  # Raise an exception for bad status codes
+        data = resp.json()
 
-    query = {"query": game, "is_in_circulation": 1}
-    resp = requests.get(GAME_QUERY_URL, params=query, timeout=HTTP_TIMEOUT)
-    data = resp.json()
-
-    # Parse JSON for availabe games
-    games = data["result"]["items"]
-    matches = []
-    for g in games:
-        if (
-            g["custom_fields"]["ItemType"] == "Standalone"
-            and g["custom_fields"]["Location"] != "HOT GAMES"
-        ):
-            matches.append(g)
-    return matches
+        # Parse JSON for availabe games
+        games = data["result"]["items"]
+        matches = []
+        for g in games:
+            if (
+                g["custom_fields"]["ItemType"] == "Standalone"
+                and g["custom_fields"]["Location"] != "HOT GAMES"
+            ):
+                matches.append(g)
+        return matches
+    except (SSLError, ConnectionError) as e:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"({now}) HTTPS/Connection error when checking tabletop.events API for game '{game}': {e}", file=sys.stderr)
+        raise
+    except Timeout as e:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"({now}) Timeout error when checking tabletop.events API for game '{game}': {e}", file=sys.stderr)
+        raise
+    except RequestException as e:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"({now}) Request error when checking tabletop.events API for game '{game}': {e}", file=sys.stderr)
+        raise
 
 
 def get_game_availablity(games):
@@ -139,19 +153,33 @@ def get_attendee_badge_availablity():
     Query the tabletop.events API for badge availability.
 
     """
-    # Make request to tabletop.events
-    resp = requests.get(
-        f"https://tabletop.events/api/convention/{CONVENTION_UUID}/badgetypes?_include_relationships=1&_items_per_page=10&_order_by=sequence_number&_page_number=1",
-        timeout=HTTP_TIMEOUT,
-    )
-    data = resp.json()
+    try:
+        # Make request to tabletop.events
+        resp = requests.get(
+            f"https://tabletop.events/api/convention/{CONVENTION_UUID}/badgetypes?_include_relationships=1&_items_per_page=10&_order_by=sequence_number&_page_number=1",
+            timeout=HTTP_TIMEOUT,
+        )
+        resp.raise_for_status()  # Raise an exception for bad status codes
+        data = resp.json()
 
-    # Parse JSON for available badges
-    item_name = data["result"]["items"][0]["name"]
-    available_quantity = data["result"]["items"][0]["available_quantity"]
-    max_available_count = data["result"]["items"][0]["max_available_count"]
+        # Parse JSON for available badges
+        item_name = data["result"]["items"][0]["name"]
+        available_quantity = data["result"]["items"][0]["available_quantity"]
+        max_available_count = data["result"]["items"][0]["max_available_count"]
 
-    return item_name, available_quantity, max_available_count
+        return item_name, available_quantity, max_available_count
+    except (SSLError, ConnectionError) as e:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"({now}) HTTPS/Connection error when checking tabletop.events API: {e}", file=sys.stderr)
+        raise
+    except Timeout as e:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"({now}) Timeout error when checking tabletop.events API: {e}", file=sys.stderr)
+        raise
+    except RequestException as e:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"({now}) Request error when checking tabletop.events API: {e}", file=sys.stderr)
+        raise
 
 
 def get_sheets_service():
@@ -298,8 +326,9 @@ def game_mode():
             prev = cur
             backoff = GAME_POLL_INTERVAL
         except Exception as error:
-            print(f"An error occurred: {error}")
-            send_discord_message(f"🤖 An error occurred: {error}")
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"({now}) An error occurred: {error}", file=sys.stderr)
+            # Log errors instead of spamming Discord
             backoff = min(backoff * 2, GAME_MAX_BACKOFF)  # Exponential backoff up to max backoff
 
         time.sleep(backoff)
@@ -310,33 +339,38 @@ def badge_mode():
     prev_available = 10000
     last_update = 0
     while True:
-        name, available, num_badges = get_attendee_badge_availablity()
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(
-            f"({now}) {available} of {num_badges} {name} badges available.",
-            file=sys.stdout,
-        )
-        if available > 0 and prev_available == 0:
-            msg = (
-                f"({now}) 🔔 @everyone 🔔 {available} of {num_badges} {name} badges available: "
-                "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
+        try:
+            name, available, num_badges = get_attendee_badge_availablity()
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(
+                f"({now}) {available} of {num_badges} {name} badges available.",
+                file=sys.stdout,
             )
-            send_discord_message(msg)
-        elif available > 0 and prev_available != available:
-            msg = (
-                f"({now}) 🎟️ {available} of {num_badges} {name} badges available: "
-                "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
-            )
-            send_discord_message(msg)
-        elif prev_available > 0 and available == 0:
-            msg = f"({now}) 😢 {name} badges are sold out, {available} of {num_badges} available."
-            send_discord_message(msg)
-            last_update = time.time()
-        elif time.time() - last_update > BADGE_STATUS_UPDATE_INTERVAL:
-            msg = f"({now}) 🤖 Still checking for {name} badges..."
-            send_discord_message(msg)
-            last_update = time.time()
-        prev_available = available
+            if available > 0 and prev_available == 0:
+                msg = (
+                    f"({now}) 🔔 @everyone 🔔 {available} of {num_badges} {name} badges available: "
+                    "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
+                )
+                send_discord_message(msg)
+            elif available > 0 and prev_available != available:
+                msg = (
+                    f"({now}) 🎟️ {available} of {num_badges} {name} badges available: "
+                    "https://tabletop.events/conventions/bgg.con-2023/badgetypes"
+                )
+                send_discord_message(msg)
+            elif prev_available > 0 and available == 0:
+                msg = f"({now}) 😢 {name} badges are sold out, {available} of {num_badges} available."
+                send_discord_message(msg)
+                last_update = time.time()
+            elif time.time() - last_update > BADGE_STATUS_UPDATE_INTERVAL:
+                msg = f"({now}) 🤖 Still checking for {name} badges..."
+                send_discord_message(msg)
+                last_update = time.time()
+            prev_available = available
+        except Exception as error:
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"({now}) An error occurred: {error}", file=sys.stderr)
+            # Log errors instead of spamming Discord
         time.sleep(BADGE_POLL_INTERVAL)
 
 
