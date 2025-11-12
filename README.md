@@ -263,6 +263,17 @@ If you encounter Google Sheets authentication errors:
 - Check that the library UUID is correct
 - Verify the Google Sheets API has access to your spreadsheet
 
+## Release Notes
+
+For detailed information about updates and changes, see [RELEASE_NOTES_2025.md](RELEASE_NOTES_2025.md).
+
+### Recent Updates (2025)
+- ✅ Comprehensive logging system for Docker monitoring
+- ✅ GitHub Actions CI/CD with automated Docker builds
+- ✅ GitHub Container Registry (ghcr.io) integration
+- ✅ Enhanced HTTPS/SSL error handling
+- ✅ Improved error recovery and logging
+
 ## License
 
 [Add your license here]
