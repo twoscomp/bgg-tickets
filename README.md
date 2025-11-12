@@ -160,29 +160,35 @@ docker run -d \
 
 ### GitHub Actions / CI/CD
 
-This repository includes a GitHub Actions workflow that automatically builds and pushes Docker images to Docker Hub on pushes to `master`/`main` branches and when tags are created.
+This repository includes a GitHub Actions workflow that automatically builds and pushes Docker images to GitHub Container Registry (ghcr.io) on pushes to `master`/`main` branches and when tags are created.
 
 **Setup**:
 
-1. Add the following secrets to your GitHub repository (Settings → Secrets and variables → Actions):
-   - `DOCKER_USERNAME`: Your Docker Hub username
-   - `DOCKER_PASSWORD`: Your Docker Hub password or access token
+1. No additional setup required! The workflow uses GitHub Container Registry (ghcr.io) which is integrated with GitHub and uses the built-in `GITHUB_TOKEN` for authentication.
 
 2. The workflow will automatically:
    - Build the Docker image on every push to `master`/`main`
    - Build (but not push) on pull requests
-   - Push to Docker Hub with appropriate tags:
+   - Push to GitHub Container Registry with appropriate tags:
      - `latest` for the default branch
      - Branch name for feature branches
      - Semantic version tags (e.g., `v1.0.0`, `1.0`, `1`) when you create tags
      - Commit SHA for traceability
 
-3. Pull the latest image from Docker Hub:
+3. Pull the latest image from GitHub Container Registry:
    ```bash
-   docker pull <DOCKER_USERNAME>/bgg-tickets:latest
+   docker pull ghcr.io/<YOUR_GITHUB_USERNAME>/bgg-tickets:latest
    ```
 
-**Note**: The workflow uses Docker Buildx with GitHub Actions cache for faster builds.
+   For example, if your GitHub username is `dlin`:
+   ```bash
+   docker pull ghcr.io/dlin/bgg-tickets:latest
+   ```
+
+**Note**: 
+- The workflow uses Docker Buildx with GitHub Actions cache for faster builds.
+- Images are stored in GitHub Container Registry (ghcr.io) which is free for public repositories.
+- If you prefer Docker Hub, you can modify the workflow to use Docker Hub by adding `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets and updating the registry configuration.
 
 ## Configuration
 
