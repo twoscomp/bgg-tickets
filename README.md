@@ -133,6 +133,7 @@ Run the container:
 
 ```bash
 docker run -d \
+  --restart unless-stopped \
   -e WEBHOOK_URL="https://discord.com/api/webhooks/YOUR_WEBHOOK_URL" \
   -e BGG_GAME_MODE=true \
   -e BGG_CONVENTION_UUID="YOUR_CONVENTION_UUID" \
@@ -145,11 +146,43 @@ docker run -d \
 ```
 
 **Note**: 
+- The `--restart unless-stopped` flag ensures the container automatically restarts on crashes or when Docker daemon restarts, but won't restart if you explicitly stop it
 - Only include the environment variables you need to override. The defaults will work for the original BGG.CON setup.
 - The Dockerfile sets the working directory to `/app`, so files are expected at `/app/credentials.json` and `/app/token.json`
 - When using volume mounts, mount the files to `/app/` (as shown above)
 - Alternatively, you can use `GOOGLE_CREDENTIALS_FILE` and `GOOGLE_TOKEN_FILE` environment variables to specify custom paths
 - Make sure to mount `credentials.json` and `token.json` as volumes if using game mode
+
+**Restart Policies**:
+- `--restart unless-stopped` (recommended): Automatically restarts on crashes and Docker daemon restarts, but respects manual stops
+- `--restart always`: Always restarts the container, even after manual stops (restarts on next Docker daemon start)
+- `--restart on-failure`: Only restarts if the container exits with a non-zero status code
+
+### GitHub Actions / CI/CD
+
+This repository includes a GitHub Actions workflow that automatically builds and pushes Docker images to Docker Hub on pushes to `master`/`main` branches and when tags are created.
+
+**Setup**:
+
+1. Add the following secrets to your GitHub repository (Settings → Secrets and variables → Actions):
+   - `DOCKER_USERNAME`: Your Docker Hub username
+   - `DOCKER_PASSWORD`: Your Docker Hub password or access token
+
+2. The workflow will automatically:
+   - Build the Docker image on every push to `master`/`main`
+   - Build (but not push) on pull requests
+   - Push to Docker Hub with appropriate tags:
+     - `latest` for the default branch
+     - Branch name for feature branches
+     - Semantic version tags (e.g., `v1.0.0`, `1.0`, `1`) when you create tags
+     - Commit SHA for traceability
+
+3. Pull the latest image from Docker Hub:
+   ```bash
+   docker pull <DOCKER_USERNAME>/bgg-tickets:latest
+   ```
+
+**Note**: The workflow uses Docker Buildx with GitHub Actions cache for faster builds.
 
 ## Configuration
 
